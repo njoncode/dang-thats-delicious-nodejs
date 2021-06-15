@@ -1,6 +1,7 @@
-node_modules
+node_modules/
+.DS_Store
+*.log
+.idea
+haters/
 variables.env
-# .DS_Store:  On Mac
-.DS_Store 
-#  dist: we can generate our dist code whenever we need to.
-dist
+variables.env.now
