@@ -20,9 +20,17 @@ const userSchema = new Schema({
         required: 'Please supply a name',
         trim: true
     },
-    });
+    resetPasswordToken: String,
+    resetPasswordExpires: Date
+});
 
-    userSchema.plugin(passportLocalMongoose, { usernameField: 'email' });
-    userSchema.plugin(mongodbErrorHandler);
+userSchema.virtual('gravatar').get(function () {
+    const hash = md5(this.email);
+    return `https://gravatar.com/avatar/${hash}?s=200`
+    // return 'https://1.bp.blogspot.com/-S6jFmpbgzHA/XZYGToPEoEI/AAAAAAAAmCs/5omQruzvMEsy-GpHJ_TB56zoJoBqSvhdQCNcBGAsYHQ/s1600/Alone%2BImages%2BWhatsapp%2BDp%2B%25281%2529.jpeg'
+});
+
+userSchema.plugin(passportLocalMongoose, { usernameField: 'email' });
+userSchema.plugin(mongodbErrorHandler);
 
 module.exports = mongoose.model('User', userSchema);
