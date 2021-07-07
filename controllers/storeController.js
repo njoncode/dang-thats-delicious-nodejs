@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
-const Store = mongoose.model('Store')
+const Store = mongoose.model('Store');
+const User = mongoose.model('User');
 const multer = require('multer');
 const jimp = require('jimp');
 const uuid = require('uuid');
@@ -53,10 +54,28 @@ exports.createStore = async (req, res) => {
 };
 
 exports.getStores = async (req, res) => {
+    const page = req.params.page || 1;
+    const limit = 4;
+    const skip = (page * limit) - limit;
     // 1. Query the database for a list of all stores
-    const stores = await Store.find();
-    console.log(stores)
-    res.render('stores', { title: 'Stores', stores });
+    const storesPromise = Store
+        .find()
+        .skip(skip)
+        .limit(limit)
+        .sort({ created: 'desc' });
+
+    const countPromise = Store.count();
+
+    const [stores, count] = await Promise.all([storesPromise, countPromise]);
+
+    const pages = Math.ceil(count / limit);
+    if (!stores.length && skip) {
+        req.flash('info', `Hey! You asked for page ${page}. But that doesn't exist. So I put you on page ${pages}`);
+        res.redirect(`stores/page/${pages}`);
+        return;
+    }
+
+    res.render('stores', { title: 'Stores', stores, page, pages, count });
 };
 
 const confirmOwner = (store, user) => {
@@ -96,7 +115,7 @@ exports.getStoreBySlug = async (req, res, next) => {
     // res.send('It works')
     // res.json(req.params);
     const store = await Store.findOne({ slug: req.params.slug }).
-        populate('author');
+        populate('author reviews');
     if (!store) return next();
     res.render('store', { store, title: store.title });
 }
@@ -110,3 +129,69 @@ exports.getStoresByTag = async (req, res) => {
     res.render('tag', { tags, title: 'Tags', tag, stores })
 }
 
+
+exports.searchStores = async (req, res) => {
+    const stores = await Store
+        // first find stores that match
+        .find({
+            $text: {
+                $search: req.query.q
+            }
+        }, {
+            score: { $meta: 'textScore' }
+        })
+        .sort({
+            score: { $meta: 'textScore' }
+        })
+        // limit to only 5 results
+        .limit(5);
+    res.json(stores);
+};
+
+
+exports.mapStores = async (req, res) => {
+    const coordinates = [req.query.lng, req.query.lat].map(parseFloat);
+    const q = {
+        location: {
+            $near: {
+                $geometry: {
+                    type: 'Point',
+                    coordinates
+                },
+                $maxDistance: 10000 // 10km
+            }
+        }
+    };
+
+    const stores = await Store.find(q).select('slug name description location').limit(10);
+    res.json(stores)
+}
+
+exports.mapPage = (req, res) => {
+    res.render('map', { title: 'Map' });
+}
+
+exports.heartStore = async (req, res) => {
+    const hearts = req.user.hearts.map(obj => obj.toString());
+    const operator = hearts.includes(req.params.id) ? '$pull' : '$addToSet';
+    const user = await User
+        .findByIdAndUpdate(req.user._id,
+            { [operator]: { hearts: req.params.id } },
+            { new: true }
+        );
+    res.json(user);
+};
+
+
+exports.getHearts = async (req, res) => {
+    const stores = await Store.find({
+        _id: { $in: req.user.hearts }
+    });
+    res.render('stores', { title: 'Hearted Stores', stores });
+}
+
+exports.getTopStores = async (req, res) => {
+    const stores = await Store.getTopStores();
+    res.render('topStores', { stores, title: '⭐️Top Stores!' });
+    // res.json(stores);
+};
